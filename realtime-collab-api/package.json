@@ -1,0 +1,11 @@
+{
+  "name": "realtime-collab-api",
+  "version": "1.0.0",
+  "description": "Real-time Collaboration API — Full Stack Project",
+  "scripts": {
+    "dev": "cd backend && npm run dev",
+    "install:backend": "cd backend && npm install",
+    "docker:up": "docker-compose up --build",
+    "docker:down": "docker-compose down"
+  }
+}

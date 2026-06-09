@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CollabDocs — Editor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/main.css" />
+  <link rel="stylesheet" href="/css/editor.css" />
+</head>
+<body>
+
+<div class="editor-layout">
+
+  <!-- Topbar -->
+  <header class="topbar">
+    <a href="/" class="topbar-logo">⚡</a>
+    <input
+      type="text"
+      id="doc-title-input"
+      placeholder="Untitled Document"
+      maxlength="100"
+    />
+    <div class="topbar-actions">
+      <span id="save-status">Saved</span>
+      <div style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2)">
+        <div id="conn-dot" class="conn-dot connecting"></div>
+        <span id="conn-label">Connecting…</span>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="openVersionModal()">History</button>
+      <button class="btn btn-ghost btn-sm" onclick="shareDoc()">Share</button>
+      <button class="btn btn-ghost btn-sm" onclick="goToDashboard()">← Dashboard</button>
+    </div>
+  </header>
+
+  <!-- Main editor -->
+  <main class="editor-main">
+    <textarea
+      id="editor"
+      placeholder="Start writing… your changes sync in real-time ✨"
+      spellcheck="true"
+    ></textarea>
+    <div style="margin-top:12px;font-size:12px;color:var(--text2);width:100%;max-width:760px;display:flex;justify-content:space-between">
+      <span id="word-count">0 words</span>
+      <span id="doc-version">v1</span>
+    </div>
+  </main>
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+
+    <!-- Active users -->
+    <div class="sidebar-section">
+      <h3>Active now</h3>
+      <div id="user-list" class="user-list">
+        <div style="font-size:12px;color:var(--text2)">No one else here yet</div>
+      </div>
+    </div>
+
+    <!-- Version history -->
+    <div class="sidebar-section" style="flex:1">
+      <h3>Version history</h3>
+      <div id="version-list" class="version-list">
+        <div style="font-size:12px;color:var(--text2)">Loading…</div>
+      </div>
+    </div>
+
+  </aside>
+</div>
+
+<!-- Version preview modal -->
+<div id="version-modal" class="modal-overlay">
+  <div class="modal">
+    <h2>Version History</h2>
+    <div id="modal-version-list" class="version-list"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeVersionModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast" class="toast"></div>
+
+<!-- Socket.IO client -->
+<script src="/socket.io/socket.io.js"></script>
+<script src="/js/socket.js"></script>
+<script src="/js/presence.js"></script>
+<script src="/js/editor.js"></script>
+</body>
+</html>
