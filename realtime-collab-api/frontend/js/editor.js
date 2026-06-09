@@ -3,7 +3,7 @@
  * Handles OT operations, socket sync, version history, cursor tracking
  */
 
-const API = 'http://localhost:4000/api';
+const API = '/api';
 
 // ── State ──
 let docId       = null;

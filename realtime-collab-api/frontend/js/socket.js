@@ -8,7 +8,7 @@ const SocketClient = (() => {
   const handlers = {};
 
   function connect(token) {
-    socket = io('http://localhost:4000', {
+    socket = io(window.location.origin, {
       auth: { token },
       reconnectionDelay: 1000,
       reconnectionAttempts: 5,
