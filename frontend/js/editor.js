@@ -379,52 +379,19 @@ function setupCursorOverlay() {
   `;
   wrapper.appendChild(cursorOverlay);
 
-  // Re-render on scroll so cursors stay in sync
   editorEl.addEventListener('scroll', renderRemoteCursors);
 }
 
-function getCaretCoordinates(textarea, position) {
-  const mirror = document.createElement('div');
+function getLineTop(textarea, position) {
+  // Count newlines up to position to get line number
+  const textBefore = textarea.value.substring(0, position);
+  const lineNumber = (textBefore.match(/\n/g) || []).length;
+
   const style = window.getComputedStyle(textarea);
+  const lineHeight = parseFloat(style.lineHeight) || 24;
+  const paddingTop = parseFloat(style.paddingTop) || 0;
 
-  mirror.style.cssText = `
-    position: fixed;
-    visibility: hidden;
-    white-space: pre-wrap;
-    word-wrap: break-word;
-    overflow-wrap: break-word;
-    font-size: ${style.fontSize};
-    font-family: ${style.fontFamily};
-    font-weight: ${style.fontWeight};
-    line-height: ${style.lineHeight};
-    padding: ${style.padding};
-    border: ${style.border};
-    width: ${textarea.clientWidth}px;
-    box-sizing: border-box;
-    top: -9999px;
-    left: -9999px;
-  `;
-
-  // Escape HTML in text
-  const text = textarea.value.substring(0, position);
-  mirror.textContent = text;
-
-  const span = document.createElement('span');
-  span.textContent = '\u200b'; // zero-width space as cursor marker
-  mirror.appendChild(span);
-
-  document.body.appendChild(mirror);
-
-  const mirrorRect = mirror.getBoundingClientRect();
-  const spanRect = span.getBoundingClientRect();
-  const textareaRect = textarea.getBoundingClientRect();
-
-  document.body.removeChild(mirror);
-
-  return {
-    top: (spanRect.top - mirrorRect.top) - textarea.scrollTop,
-    left: spanRect.left - mirrorRect.left,
-  };
+  return paddingTop + (lineNumber * lineHeight) - textarea.scrollTop;
 }
 
 function renderRemoteCursors() {
@@ -435,21 +402,18 @@ function renderRemoteCursors() {
     if (position === undefined || position === null) return;
 
     const color = getUserColor(userId);
-    const coords = getCaretCoordinates(editor, position);
+    const top = getLineTop(editor, position);
 
-    // Reuse existing cursor element per user, create if not exists
     let wrap = document.getElementById(`cursor-${userId}`);
     if (!wrap) {
       wrap = document.createElement('div');
       wrap.id = `cursor-${userId}`;
-      wrap.style.cssText = `position: absolute; pointer-events: none;`;
+      wrap.style.cssText = `position: absolute; pointer-events: none; left: 12px;`;
 
       const line = document.createElement('div');
-      line.className = 'cursor-line';
       line.style.cssText = `
-        position: absolute;
         width: 2px;
-        height: 20px;
+        height: 22px;
         background: ${color};
         border-radius: 1px;
         animation: cursorBlink 1s ease-in-out infinite;
@@ -477,12 +441,10 @@ function renderRemoteCursors() {
       cursorOverlay.appendChild(wrap);
     }
 
-    // Update position
-    wrap.style.top = `${coords.top}px`;
-    wrap.style.left = `${coords.left}px`;
+    wrap.style.top = `${top}px`;
   });
 
-  // Remove cursors for users no longer in remoteCursors
+  // Remove cursors for gone users
   cursorOverlay.querySelectorAll('[id^="cursor-"]').forEach(el => {
     const uid = el.id.replace('cursor-', '');
     if (!remoteCursors[uid]) el.remove();
