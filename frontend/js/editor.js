@@ -56,8 +56,10 @@ function getUserColor(userId) {
   SocketClient.connect(token);
   setupSocketHandlers();
   setupEditorHandlers();
-  setupCursorOverlay();
   loadVersionHistory();
+
+  // Setup cursor overlay after DOM is ready
+  window.addEventListener('load', setupCursorOverlay);
 })();
 
 // ── Socket Handlers ──
@@ -366,7 +368,9 @@ document.getElementById('version-modal').addEventListener('click', (e) => {
 // ── Remote Cursor Rendering ──
 function setupCursorOverlay() {
   const editorEl = document.getElementById('editor');
+  if (!editorEl) return;
   const wrapper = editorEl.parentElement;
+  if (!wrapper) return;
 
   // Make wrapper relative so overlay can sit on top
   wrapper.style.position = 'relative';
