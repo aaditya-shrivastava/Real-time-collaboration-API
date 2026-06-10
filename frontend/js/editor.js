@@ -362,6 +362,8 @@ document.getElementById('version-modal').addEventListener('click', (e) => {
 function setupCursorOverlay() {
   const editorEl = document.getElementById('editor');
   if (!editorEl) return;
+
+  // Position overlay as sibling to textarea, inside editor-main
   const wrapper = editorEl.parentElement;
   if (!wrapper) return;
 
@@ -369,16 +371,26 @@ function setupCursorOverlay() {
 
   cursorOverlay = document.createElement('div');
   cursorOverlay.id = 'cursor-overlay';
-  cursorOverlay.style.cssText = `
-    position: absolute;
-    top: 0; left: 0;
-    width: 100%; height: 100%;
-    pointer-events: none;
-    overflow: hidden;
-    border-radius: 10px;
-  `;
-  wrapper.appendChild(cursorOverlay);
 
+  // Match overlay exactly to textarea position
+  const updateOverlayPosition = () => {
+    const rect = editorEl.getBoundingClientRect();
+    const wrapRect = wrapper.getBoundingClientRect();
+    cursorOverlay.style.cssText = `
+      position: absolute;
+      top: ${rect.top - wrapRect.top}px;
+      left: ${rect.left - wrapRect.left}px;
+      width: ${rect.width}px;
+      height: ${rect.height}px;
+      pointer-events: none;
+      overflow: hidden;
+      border-radius: 10px;
+    `;
+  };
+
+  updateOverlayPosition();
+  window.addEventListener('resize', updateOverlayPosition);
+  wrapper.appendChild(cursorOverlay);
   editorEl.addEventListener('scroll', renderRemoteCursors);
 }
 
@@ -408,7 +420,9 @@ function renderRemoteCursors() {
     if (!wrap) {
       wrap = document.createElement('div');
       wrap.id = `cursor-${userId}`;
-      wrap.style.cssText = `position: absolute; pointer-events: none; left: 12px;`;
+      const style = window.getComputedStyle(editor);
+      const paddingLeft = parseFloat(style.paddingLeft) || 40;
+      wrap.style.cssText = `position: absolute; pointer-events: none; left: ${paddingLeft}px;`;
 
       const line = document.createElement('div');
       line.style.cssText = `
