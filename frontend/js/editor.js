@@ -20,11 +20,6 @@ let titleTimer       = null;
 const remoteCursors = {};
 let cursorOverlay = null;
 
-// ── Cursor Colors ──
-const CURSOR_COLORS = [
-  '#f56565','#ed8936','#ecc94b','#48bb78',
-  '#38b2ac','#4299e1','#9f7aea','#ed64a6',
-];
 const userColorMap = {};
 let colorIndex = 0;
 
