@@ -12,6 +12,8 @@ const SocketClient = (() => {
       auth: { token },
       reconnectionDelay: 1000,
       reconnectionAttempts: 5,
+      pingTimeout: 60000,
+      pingInterval: 25000,
     });
 
     socket.on('connect', () => {
