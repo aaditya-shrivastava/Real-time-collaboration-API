@@ -28,9 +28,6 @@ const Document = {
        FROM documents d
        JOIN users u ON u.id = d.owner_id
        WHERE d.owner_id = $1
-         OR d.id IN (
-           SELECT document_id FROM document_collaborators WHERE user_id = $1
-         )
        ORDER BY d.updated_at DESC`,
       [userId]
     );
@@ -61,11 +58,10 @@ const Document = {
   },
 
   async isOwnerOrCollaborator(docId, userId) {
+    // Allow any authenticated user to join via shared URL
     const { rows } = await pool.query(
-      `SELECT 1 FROM documents WHERE id = $1 AND owner_id = $2
-       UNION
-       SELECT 1 FROM document_collaborators WHERE document_id = $1 AND user_id = $2`,
-      [docId, userId]
+      `SELECT 1 FROM documents WHERE id = $1`,
+      [docId]
     );
     return rows.length > 0;
   },
