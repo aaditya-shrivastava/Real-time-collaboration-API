@@ -367,7 +367,6 @@ function setupCursorOverlay() {
   const wrapper = editorEl.parentElement;
   if (!wrapper) return;
 
-  // Make wrapper relative so overlay can sit on top
   wrapper.style.position = 'relative';
 
   cursorOverlay = document.createElement('div');
@@ -381,51 +380,58 @@ function setupCursorOverlay() {
     border-radius: 10px;
   `;
   wrapper.appendChild(cursorOverlay);
+
+  // Re-render on scroll so cursors stay in sync
+  editorEl.addEventListener('scroll', renderRemoteCursors);
 }
 
 function getCaretCoordinates(textarea, position) {
-  // Create a mirror div to measure caret position
   const mirror = document.createElement('div');
   const style = window.getComputedStyle(textarea);
 
   mirror.style.cssText = `
-    position: absolute;
+    position: fixed;
     visibility: hidden;
     white-space: pre-wrap;
     word-wrap: break-word;
-    overflow: hidden;
-    font: ${style.font};
+    overflow-wrap: break-word;
     font-size: ${style.fontSize};
     font-family: ${style.fontFamily};
+    font-weight: ${style.fontWeight};
     line-height: ${style.lineHeight};
     padding: ${style.padding};
     border: ${style.border};
-    width: ${textarea.offsetWidth}px;
+    width: ${textarea.clientWidth}px;
     box-sizing: border-box;
+    top: -9999px;
+    left: -9999px;
   `;
 
+  // Escape HTML in text
   const text = textarea.value.substring(0, position);
   mirror.textContent = text;
 
-  const cursor = document.createElement('span');
-  cursor.textContent = '|';
-  mirror.appendChild(cursor);
+  const span = document.createElement('span');
+  span.textContent = '\u200b'; // zero-width space as cursor marker
+  mirror.appendChild(span);
 
   document.body.appendChild(mirror);
-  const rect = cursor.getBoundingClientRect();
+
+  const mirrorRect = mirror.getBoundingClientRect();
+  const spanRect = span.getBoundingClientRect();
   const textareaRect = textarea.getBoundingClientRect();
+
   document.body.removeChild(mirror);
 
   return {
-    top: rect.top - textareaRect.top + textarea.scrollTop,
-    left: rect.left - textareaRect.left,
+    top: (spanRect.top - mirrorRect.top) - textarea.scrollTop,
+    left: spanRect.left - mirrorRect.left,
   };
 }
 
 function renderRemoteCursors() {
   if (!cursorOverlay) return;
   const editor = document.getElementById('editor');
-  cursorOverlay.innerHTML = '';
 
   Object.entries(remoteCursors).forEach(([userId, { position, username }]) => {
     if (position === undefined || position === null) return;
@@ -433,39 +439,55 @@ function renderRemoteCursors() {
     const color = getUserColor(userId);
     const coords = getCaretCoordinates(editor, position);
 
-    // Cursor line
-    const line = document.createElement('div');
-    line.style.cssText = `
-      position: absolute;
-      top: ${coords.top}px;
-      left: ${coords.left}px;
-      width: 2px;
-      height: 20px;
-      background: ${color};
-      border-radius: 1px;
-      animation: cursorBlink 1s ease-in-out infinite;
-    `;
+    // Reuse existing cursor element per user, create if not exists
+    let wrap = document.getElementById(`cursor-${userId}`);
+    if (!wrap) {
+      wrap = document.createElement('div');
+      wrap.id = `cursor-${userId}`;
+      wrap.style.cssText = `position: absolute; pointer-events: none;`;
 
-    // Name tag
-    const tag = document.createElement('div');
-    tag.textContent = username;
-    tag.style.cssText = `
-      position: absolute;
-      top: ${coords.top - 22}px;
-      left: ${coords.left}px;
-      background: ${color};
-      color: #fff;
-      font-size: 11px;
-      font-weight: 600;
-      font-family: Inter, system-ui, sans-serif;
-      padding: 2px 7px;
-      border-radius: 4px;
-      white-space: nowrap;
-      pointer-events: none;
-    `;
+      const line = document.createElement('div');
+      line.className = 'cursor-line';
+      line.style.cssText = `
+        position: absolute;
+        width: 2px;
+        height: 20px;
+        background: ${color};
+        border-radius: 1px;
+        animation: cursorBlink 1s ease-in-out infinite;
+      `;
 
-    cursorOverlay.appendChild(line);
-    cursorOverlay.appendChild(tag);
+      const tag = document.createElement('div');
+      tag.className = 'cursor-tag';
+      tag.textContent = username;
+      tag.style.cssText = `
+        position: absolute;
+        top: -22px;
+        left: 0;
+        background: ${color};
+        color: #fff;
+        font-size: 11px;
+        font-weight: 600;
+        font-family: Inter, system-ui, sans-serif;
+        padding: 2px 7px;
+        border-radius: 4px;
+        white-space: nowrap;
+      `;
+
+      wrap.appendChild(line);
+      wrap.appendChild(tag);
+      cursorOverlay.appendChild(wrap);
+    }
+
+    // Update position
+    wrap.style.top = `${coords.top}px`;
+    wrap.style.left = `${coords.left}px`;
+  });
+
+  // Remove cursors for users no longer in remoteCursors
+  cursorOverlay.querySelectorAll('[id^="cursor-"]').forEach(el => {
+    const uid = el.id.replace('cursor-', '');
+    if (!remoteCursors[uid]) el.remove();
   });
 }
 
