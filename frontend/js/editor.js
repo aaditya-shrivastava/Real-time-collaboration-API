@@ -16,6 +16,26 @@ let saveStatusTimer  = null;
 let cursorTimer      = null;
 let titleTimer       = null;
 
+// Remote cursors: userId -> { position, username, color }
+const remoteCursors = {};
+let cursorOverlay = null;
+
+// ── Cursor Colors ──
+const CURSOR_COLORS = [
+  '#f56565','#ed8936','#ecc94b','#48bb78',
+  '#38b2ac','#4299e1','#9f7aea','#ed64a6',
+];
+const userColorMap = {};
+let colorIndex = 0;
+
+function getUserColor(userId) {
+  if (!userColorMap[userId]) {
+    userColorMap[userId] = CURSOR_COLORS[colorIndex % CURSOR_COLORS.length];
+    colorIndex++;
+  }
+  return userColorMap[userId];
+}
+
 // ── Init ──
 (function init() {
   token = localStorage.getItem('token');
@@ -36,6 +56,7 @@ let titleTimer       = null;
   SocketClient.connect(token);
   setupSocketHandlers();
   setupEditorHandlers();
+  setupCursorOverlay();
   loadVersionHistory();
 })();
 
@@ -82,11 +103,15 @@ function setupSocketHandlers() {
 
   SocketClient.on('presence:left', ({ user, activeUsers }) => {
     Presence.render(activeUsers);
+    delete remoteCursors[user.id];
+    renderRemoteCursors();
     showToast(`${user.username} left`, 'info');
   });
 
   SocketClient.on('cursor:update', ({ userId, username, cursor }) => {
-    // Visual cursor tracking shown via user list highlighting
+    if (userId === currentUser.id) return;
+    remoteCursors[userId] = { position: cursor.position, username };
+    renderRemoteCursors();
   });
 
   SocketClient.on('error', ({ message }) => {
@@ -337,6 +362,113 @@ function closeVersionModal() {
 document.getElementById('version-modal').addEventListener('click', (e) => {
   if (e.target === e.currentTarget) closeVersionModal();
 });
+
+// ── Remote Cursor Rendering ──
+function setupCursorOverlay() {
+  const editorEl = document.getElementById('editor');
+  const wrapper = editorEl.parentElement;
+
+  // Make wrapper relative so overlay can sit on top
+  wrapper.style.position = 'relative';
+
+  cursorOverlay = document.createElement('div');
+  cursorOverlay.id = 'cursor-overlay';
+  cursorOverlay.style.cssText = `
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+    overflow: hidden;
+    border-radius: 10px;
+  `;
+  wrapper.appendChild(cursorOverlay);
+}
+
+function getCaretCoordinates(textarea, position) {
+  // Create a mirror div to measure caret position
+  const mirror = document.createElement('div');
+  const style = window.getComputedStyle(textarea);
+
+  mirror.style.cssText = `
+    position: absolute;
+    visibility: hidden;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    overflow: hidden;
+    font: ${style.font};
+    font-size: ${style.fontSize};
+    font-family: ${style.fontFamily};
+    line-height: ${style.lineHeight};
+    padding: ${style.padding};
+    border: ${style.border};
+    width: ${textarea.offsetWidth}px;
+    box-sizing: border-box;
+  `;
+
+  const text = textarea.value.substring(0, position);
+  mirror.textContent = text;
+
+  const cursor = document.createElement('span');
+  cursor.textContent = '|';
+  mirror.appendChild(cursor);
+
+  document.body.appendChild(mirror);
+  const rect = cursor.getBoundingClientRect();
+  const textareaRect = textarea.getBoundingClientRect();
+  document.body.removeChild(mirror);
+
+  return {
+    top: rect.top - textareaRect.top + textarea.scrollTop,
+    left: rect.left - textareaRect.left,
+  };
+}
+
+function renderRemoteCursors() {
+  if (!cursorOverlay) return;
+  const editor = document.getElementById('editor');
+  cursorOverlay.innerHTML = '';
+
+  Object.entries(remoteCursors).forEach(([userId, { position, username }]) => {
+    if (position === undefined || position === null) return;
+
+    const color = getUserColor(userId);
+    const coords = getCaretCoordinates(editor, position);
+
+    // Cursor line
+    const line = document.createElement('div');
+    line.style.cssText = `
+      position: absolute;
+      top: ${coords.top}px;
+      left: ${coords.left}px;
+      width: 2px;
+      height: 20px;
+      background: ${color};
+      border-radius: 1px;
+      animation: cursorBlink 1s ease-in-out infinite;
+    `;
+
+    // Name tag
+    const tag = document.createElement('div');
+    tag.textContent = username;
+    tag.style.cssText = `
+      position: absolute;
+      top: ${coords.top - 22}px;
+      left: ${coords.left}px;
+      background: ${color};
+      color: #fff;
+      font-size: 11px;
+      font-weight: 600;
+      font-family: Inter, system-ui, sans-serif;
+      padding: 2px 7px;
+      border-radius: 4px;
+      white-space: nowrap;
+      pointer-events: none;
+    `;
+
+    cursorOverlay.appendChild(line);
+    cursorOverlay.appendChild(tag);
+  });
+}
 
 // ── Misc ──
 function goToDashboard() {
