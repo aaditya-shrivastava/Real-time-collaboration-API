@@ -20,29 +20,52 @@ const getDocState = async (docId) => {
   return docState.get(docId);
 };
 
-const persistDoc = async (docId, content, operation, userId) => {
+const persistDoc = async (docId, content, userId) => {
   try {
-    const doc = await Document.updateContent({ id: docId, content, userId });
-    await Version.create({
-      documentId: docId,
-      versionNumber: doc.version,
-      content,
-      operation,
-      createdBy: userId,
-    });
+    await Document.updateContent({ id: docId, content, userId });
   } catch (err) {
     console.error('Persist error:', err.message);
   }
 };
 
-// Debounce persist: only write to DB after 2s of inactivity per doc
+const persistVersion = async (docId, content, userId) => {
+  try {
+    const doc = await Document.findById(docId);
+    if (!doc) return;
+
+    await Version.create({
+      documentId: docId,
+      versionNumber: doc.version,
+      content,
+      operation: { type: 'session-end' },
+      createdBy: userId,
+    });
+
+    // Keep only latest 5 versions
+    await pool.query(
+      `DELETE FROM versions
+       WHERE document_id = $1
+         AND id NOT IN (
+           SELECT id FROM versions
+           WHERE document_id = $1
+           ORDER BY version_number DESC
+           LIMIT 5
+         )`,
+      [docId]
+    );
+  } catch (err) {
+    console.error('Version persist error:', err.message);
+  }
+};
+
+// Debounce content save: only write to DB after 2s of inactivity per doc
 const persistTimers = new Map();
-const debouncePersist = (docId, content, operation, userId) => {
+const debouncePersist = (docId, content, userId) => {
   if (persistTimers.has(docId)) clearTimeout(persistTimers.get(docId));
   persistTimers.set(
     docId,
     setTimeout(() => {
-      persistDoc(docId, content, operation, userId);
+      persistDoc(docId, content, userId);
       persistTimers.delete(docId);
     }, 2000)
   );
@@ -146,8 +169,8 @@ module.exports = (io) => {
           username: user.username,
         });
 
-        // Debounced persist to DB
-        debouncePersist(docId, newContent, transformedOp, user.id);
+        // Debounced content save to DB
+        debouncePersist(docId, newContent, user.id);
       } catch (err) {
         console.error('doc:operation error:', err.message);
       }
@@ -184,6 +207,13 @@ module.exports = (io) => {
     async function handleLeave(socket, docId) {
       socket.leave(docId);
       await presenceService.userLeft(docId, user.id);
+
+      // Save a version snapshot when user leaves
+      const state = docState.get(docId);
+      if (state) {
+        await persistVersion(docId, state.content, user.id);
+      }
+
       const activeUsers = await presenceService.getActiveUsers(docId);
       io.to(docId).emit('presence:left', {
         user: { id: user.id, username: user.username },
