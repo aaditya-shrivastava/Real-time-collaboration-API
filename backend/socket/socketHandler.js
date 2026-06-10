@@ -1,21 +1,241 @@
+// const { pool } = require('../config/db');
+// const Document = require('../src/models/document');
+// const Version = require('../src/models/version');
+// const presenceService = require('../src/services/presenceService');
+// const { applyOperation, transform } = require('../src/services/otService');
+
+// // In-memory doc state: docId -> { content, version, pendingOps[] }
+// const docState = new Map();
+
+// const getDocState = async (docId) => {
+//   if (!docState.has(docId)) {
+//     const doc = await Document.findById(docId);
+//     if (!doc) return null;
+//     docState.set(docId, {
+//       content: doc.content,
+//       version: doc.version,
+//       pendingOps: [],
+//     });
+//   }
+//   return docState.get(docId);
+// };
+
+// const persistDoc = async (docId, content, userId) => {
+//   try {
+//     await Document.updateContent({ id: docId, content, userId });
+//   } catch (err) {
+//     console.error('Persist error:', err.message);
+//   }
+// };
+
+// const persistVersion = async (docId, content, userId) => {
+//   try {
+//     const doc = await Document.findById(docId);
+//     if (!doc) return;
+
+//     await Version.create({
+//       documentId: docId,
+//       versionNumber: doc.version,
+//       content,
+//       operation: { type: 'session-end' },
+//       createdBy: userId,
+//     });
+
+//     // Keep only latest 5 versions
+//     await pool.query(
+//       `DELETE FROM versions
+//        WHERE document_id = $1
+//          AND id NOT IN (
+//            SELECT id FROM versions
+//            WHERE document_id = $1
+//            ORDER BY version_number DESC
+//            LIMIT 5
+//          )`,
+//       [docId]
+//     );
+//   } catch (err) {
+//     console.error('Version persist error:', err.message);
+//   }
+// };
+
+// // Debounce content save: only write to DB after 2s of inactivity per doc
+// const persistTimers = new Map();
+// const debouncePersist = (docId, content, userId) => {
+//   if (persistTimers.has(docId)) clearTimeout(persistTimers.get(docId));
+//   persistTimers.set(
+//     docId,
+//     setTimeout(() => {
+//       persistDoc(docId, content, userId);
+//       persistTimers.delete(docId);
+//     }, 2000)
+//   );
+// };
+
+// module.exports = (io) => {
+//   io.on('connection', (socket) => {
+//     const user = socket.user;
+//     console.log(`🔌 Socket connected: ${user.username} (${socket.id})`);
+
+//     // ── JOIN DOCUMENT ROOM ──
+//     socket.on('doc:join', async ({ docId }) => {
+//       try {
+//         const allowed = await Document.isOwnerOrCollaborator(docId, user.id);
+//         if (!allowed) {
+//           socket.emit('error', { message: 'Access denied to this document' });
+//           return;
+//         }
+
+//         socket.join(docId);
+//         socket.currentDocId = docId;
+
+//         // Auto-add as collaborator if not already owner/collaborator
+//         await pool.query(
+//           `INSERT INTO document_collaborators (document_id, user_id, role)
+//            VALUES ($1, $2, 'editor')
+//            ON CONFLICT (document_id, user_id) DO NOTHING`,
+//           [docId, user.id]
+//         );
+
+//         // Load document state
+//         const state = await getDocState(docId);
+//         if (!state) {
+//           socket.emit('error', { message: 'Document not found' });
+//           return;
+//         }
+
+//         // Register presence
+//         await presenceService.userJoined(docId, user);
+//         const activeUsers = await presenceService.getActiveUsers(docId);
+
+//         // Send current document state to the joining client
+//         socket.emit('doc:init', {
+//           content: state.content,
+//           version: state.version,
+//           activeUsers,
+//         });
+
+//         // Notify others in the room
+//         socket.to(docId).emit('presence:joined', {
+//           user: { id: user.id, username: user.username },
+//           activeUsers,
+//         });
+
+//         console.log(`📄 ${user.username} joined doc ${docId}`);
+//       } catch (err) {
+//         console.error('doc:join error:', err.message);
+//         socket.emit('error', { message: err.message });
+//       }
+//     });
+
+//     // ── OPERATION (OT) ──
+//     socket.on('doc:operation', async ({ docId, operation, clientVersion }) => {
+//       try {
+//         const state = await getDocState(docId);
+//         if (!state) return;
+
+//         // Transform against any ops that happened since client's version
+//         let transformedOp = operation;
+//         if (clientVersion < state.version && state.pendingOps.length) {
+//           const opsToTransformAgainst = state.pendingOps.filter(
+//             (p) => p.version > clientVersion
+//           );
+//           for (const pending of opsToTransformAgainst) {
+//             transformedOp = transform(transformedOp, pending.op);
+//           }
+//         }
+
+//         // Apply to server state
+//         const newContent = applyOperation(state.content, transformedOp);
+//         state.version += 1;
+//         state.content = newContent;
+//         state.pendingOps.push({ op: transformedOp, version: state.version });
+
+//         // Keep pending ops buffer lean
+//         if (state.pendingOps.length > 100) {
+//           state.pendingOps = state.pendingOps.slice(-50);
+//         }
+
+//         // Ack to sender with transformed op + new version
+//         socket.emit('doc:ack', {
+//           operation: transformedOp,
+//           version: state.version,
+//         });
+
+//         // Broadcast transformed op to all other clients in room
+//         socket.to(docId).emit('doc:operation', {
+//           operation: transformedOp,
+//           version: state.version,
+//           userId: user.id,
+//           username: user.username,
+//         });
+
+//         // Debounced content save to DB
+//         debouncePersist(docId, newContent, user.id);
+//       } catch (err) {
+//         console.error('doc:operation error:', err.message);
+//       }
+//     });
+
+//     // ── CURSOR UPDATE ──
+//     socket.on('cursor:update', async ({ docId, cursor }) => {
+//       await presenceService.updateCursor(docId, user.id, cursor);
+//       socket.to(docId).emit('cursor:update', {
+//         userId: user.id,
+//         username: user.username,
+//         cursor,
+//       });
+//     });
+
+//     // ── TITLE UPDATE ──
+//     socket.on('doc:title', ({ docId, title }) => {
+//       socket.to(docId).emit('doc:title', { title, username: user.username });
+//     });
+
+//     // ── LEAVE DOCUMENT ──
+//     socket.on('doc:leave', async ({ docId }) => {
+//       await handleLeave(socket, docId);
+//     });
+
+//     // ── DISCONNECT ──
+//     socket.on('disconnect', async () => {
+//       console.log(`❌ Socket disconnected: ${user.username}`);
+//       if (socket.currentDocId) {
+//         await handleLeave(socket, socket.currentDocId);
+//       }
+//     });
+
+//     async function handleLeave(socket, docId) {
+//       socket.leave(docId);
+//       await presenceService.userLeft(docId, user.id);
+
+//       // Save a version snapshot when user leaves
+//       const state = docState.get(docId);
+//       if (state) {
+//         await persistVersion(docId, state.content, user.id);
+//       }
+
+//       const activeUsers = await presenceService.getActiveUsers(docId);
+//       io.to(docId).emit('presence:left', {
+//         user: { id: user.id, username: user.username },
+//         activeUsers,
+//       });
+//     }
+//   });
+// };
+
 const { pool } = require('../config/db');
 const Document = require('../src/models/document');
 const Version = require('../src/models/version');
 const presenceService = require('../src/services/presenceService');
-const { applyOperation, transform } = require('../src/services/otService');
 
-// In-memory doc state: docId -> { content, version, pendingOps[] }
+// In-memory doc state: docId -> { content, version, lastEditor }
 const docState = new Map();
 
 const getDocState = async (docId) => {
   if (!docState.has(docId)) {
     const doc = await Document.findById(docId);
     if (!doc) return null;
-    docState.set(docId, {
-      content: doc.content,
-      version: doc.version,
-      pendingOps: [],
-    });
+    docState.set(docId, { content: doc.content, version: doc.version });
   }
   return docState.get(docId);
 };
@@ -32,7 +252,6 @@ const persistVersion = async (docId, content, userId) => {
   try {
     const doc = await Document.findById(docId);
     if (!doc) return;
-
     await Version.create({
       documentId: docId,
       versionNumber: doc.version,
@@ -40,8 +259,6 @@ const persistVersion = async (docId, content, userId) => {
       operation: { type: 'session-end' },
       createdBy: userId,
     });
-
-    // Keep only latest 5 versions
     await pool.query(
       `DELETE FROM versions
        WHERE document_id = $1
@@ -58,17 +275,14 @@ const persistVersion = async (docId, content, userId) => {
   }
 };
 
-// Debounce content save: only write to DB after 2s of inactivity per doc
+// Debounce DB write
 const persistTimers = new Map();
 const debouncePersist = (docId, content, userId) => {
   if (persistTimers.has(docId)) clearTimeout(persistTimers.get(docId));
-  persistTimers.set(
-    docId,
-    setTimeout(() => {
-      persistDoc(docId, content, userId);
-      persistTimers.delete(docId);
-    }, 2000)
-  );
+  persistTimers.set(docId, setTimeout(() => {
+    persistDoc(docId, content, userId);
+    persistTimers.delete(docId);
+  }, 2000));
 };
 
 module.exports = (io) => {
@@ -76,49 +290,35 @@ module.exports = (io) => {
     const user = socket.user;
     console.log(`🔌 Socket connected: ${user.username} (${socket.id})`);
 
-    // ── JOIN DOCUMENT ROOM ──
+    // ── JOIN ──
     socket.on('doc:join', async ({ docId }) => {
       try {
         const allowed = await Document.isOwnerOrCollaborator(docId, user.id);
-        if (!allowed) {
-          socket.emit('error', { message: 'Access denied to this document' });
-          return;
-        }
+        if (!allowed) { socket.emit('error', { message: 'Access denied to this document' }); return; }
 
         socket.join(docId);
         socket.currentDocId = docId;
 
-        // Auto-add as collaborator if not already owner/collaborator
+        // Auto-add collaborator
         await pool.query(
           `INSERT INTO document_collaborators (document_id, user_id, role)
-           VALUES ($1, $2, 'editor')
-           ON CONFLICT (document_id, user_id) DO NOTHING`,
+           VALUES ($1, $2, 'editor') ON CONFLICT DO NOTHING`,
           [docId, user.id]
         );
 
-        // Load document state
-        const state = await getDocState(docId);
-        if (!state) {
-          socket.emit('error', { message: 'Document not found' });
-          return;
-        }
+        // Always load fresh from DB so joining user gets authoritative content
+        const doc = await Document.findById(docId);
+        if (!doc) { socket.emit('error', { message: 'Document not found' }); return; }
 
-        // Register presence
+        // Sync in-memory state with DB
+        const state = { content: doc.content, version: doc.version };
+        docState.set(docId, state);
+
         await presenceService.userJoined(docId, user);
         const activeUsers = await presenceService.getActiveUsers(docId);
 
-        // Send current document state to the joining client
-        socket.emit('doc:init', {
-          content: state.content,
-          version: state.version,
-          activeUsers,
-        });
-
-        // Notify others in the room
-        socket.to(docId).emit('presence:joined', {
-          user: { id: user.id, username: user.username },
-          activeUsers,
-        });
+        socket.emit('doc:init', { content: state.content, version: state.version, activeUsers });
+        socket.to(docId).emit('presence:joined', { user: { id: user.id, username: user.username }, activeUsers });
 
         console.log(`📄 ${user.username} joined doc ${docId}`);
       } catch (err) {
@@ -127,52 +327,29 @@ module.exports = (io) => {
       }
     });
 
-    // ── OPERATION (OT) ──
-    socket.on('doc:operation', async ({ docId, operation, clientVersion }) => {
+    // ── CONTENT SYNC (full content, no OT complexity) ──
+    socket.on('doc:sync', async ({ docId, content }) => {
       try {
         const state = await getDocState(docId);
         if (!state) return;
 
-        // Transform against any ops that happened since client's version
-        let transformedOp = operation;
-        if (clientVersion < state.version && state.pendingOps.length) {
-          const opsToTransformAgainst = state.pendingOps.filter(
-            (p) => p.version > clientVersion
-          );
-          for (const pending of opsToTransformAgainst) {
-            transformedOp = transform(transformedOp, pending.op);
-          }
-        }
-
-        // Apply to server state
-        const newContent = applyOperation(state.content, transformedOp);
+        state.content = content;
         state.version += 1;
-        state.content = newContent;
-        state.pendingOps.push({ op: transformedOp, version: state.version });
 
-        // Keep pending ops buffer lean
-        if (state.pendingOps.length > 100) {
-          state.pendingOps = state.pendingOps.slice(-50);
-        }
-
-        // Ack to sender with transformed op + new version
-        socket.emit('doc:ack', {
-          operation: transformedOp,
-          version: state.version,
-        });
-
-        // Broadcast transformed op to all other clients in room
-        socket.to(docId).emit('doc:operation', {
-          operation: transformedOp,
+        // Broadcast full content to all other clients — they replace their content
+        socket.to(docId).emit('doc:sync', {
+          content,
           version: state.version,
           userId: user.id,
           username: user.username,
         });
 
-        // Debounced content save to DB
-        debouncePersist(docId, newContent, user.id);
+        // Ack to sender
+        socket.emit('doc:ack', { version: state.version });
+
+        debouncePersist(docId, content, user.id);
       } catch (err) {
-        console.error('doc:operation error:', err.message);
+        console.error('doc:sync error:', err.message);
       }
     });
 
@@ -191,34 +368,23 @@ module.exports = (io) => {
       socket.to(docId).emit('doc:title', { title, username: user.username });
     });
 
-    // ── LEAVE DOCUMENT ──
+    // ── LEAVE ──
     socket.on('doc:leave', async ({ docId }) => {
       await handleLeave(socket, docId);
     });
 
-    // ── DISCONNECT ──
     socket.on('disconnect', async () => {
       console.log(`❌ Socket disconnected: ${user.username}`);
-      if (socket.currentDocId) {
-        await handleLeave(socket, socket.currentDocId);
-      }
+      if (socket.currentDocId) await handleLeave(socket, socket.currentDocId);
     });
 
     async function handleLeave(socket, docId) {
       socket.leave(docId);
       await presenceService.userLeft(docId, user.id);
-
-      // Save a version snapshot when user leaves
       const state = docState.get(docId);
-      if (state) {
-        await persistVersion(docId, state.content, user.id);
-      }
-
+      if (state) await persistVersion(docId, state.content, user.id);
       const activeUsers = await presenceService.getActiveUsers(docId);
-      io.to(docId).emit('presence:left', {
-        user: { id: user.id, username: user.username },
-        activeUsers,
-      });
+      io.to(docId).emit('presence:left', { user: { id: user.id, username: user.username }, activeUsers });
     }
   });
 };

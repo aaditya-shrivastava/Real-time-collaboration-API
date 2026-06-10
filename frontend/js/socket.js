@@ -39,7 +39,7 @@ const SocketClient = (() => {
 
     // Proxy all custom events to registered handlers
     const events = [
-      'doc:init', 'doc:operation', 'doc:ack', 'doc:title',
+      'doc:init', 'doc:sync', 'doc:ack', 'doc:title',
       'presence:joined', 'presence:left',
       'cursor:update', 'error',
     ];

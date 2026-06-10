@@ -72,11 +72,18 @@ function setupSocketHandlers() {
     Presence.render(activeUsers);
   });
 
-  SocketClient.on('doc:operation', ({ operation, version, userId, username }) => {
-    if (userId === currentUser.id) return; // ignore our own broadcast
-    applyRemoteOperation(operation);
+  SocketClient.on('doc:sync', ({ content, version, userId }) => {
+    if (userId === currentUser.id) return;
+    isApplyingRemote = true;
+    const editor = document.getElementById('editor');
+    const cursorPos = editor.selectionStart;
+    editor.value = content;
+    localContent = content;
     serverVersion = version;
+    editor.setSelectionRange(cursorPos, cursorPos);
     document.getElementById('doc-version').textContent = `v${version}`;
+    updateWordCount(content);
+    isApplyingRemote = false;
   });
 
   SocketClient.on('doc:ack', ({ operation, version }) => {
@@ -134,26 +141,17 @@ function setupEditorHandlers() {
     })
     .catch(() => {});
 
-  // Editor input → generate OT operation
-  let lastContent = '';
+  // Editor input → broadcast full content
   editor.addEventListener('input', () => {
     if (isApplyingRemote) return;
 
     const newContent = editor.value;
-    const op = diffToOperation(lastContent || localContent, newContent);
-    lastContent = newContent;
     localContent = newContent;
 
     updateWordCount(newContent);
     setSaveStatus('saving');
 
-    if (op) {
-      SocketClient.emit('doc:operation', {
-        docId,
-        operation: op,
-        clientVersion: serverVersion,
-      });
-    }
+    SocketClient.emit('doc:sync', { docId, content: newContent });
   });
 
   // Cursor position broadcast
