@@ -1,3 +1,4 @@
+const { pool } = require('../config/db');
 const Document = require('../src/models/document');
 const Version = require('../src/models/version');
 const presenceService = require('../src/services/presenceService');
@@ -63,6 +64,14 @@ module.exports = (io) => {
 
         socket.join(docId);
         socket.currentDocId = docId;
+
+        // Auto-add as collaborator if not already owner/collaborator
+        await pool.query(
+          `INSERT INTO document_collaborators (document_id, user_id, role)
+           VALUES ($1, $2, 'editor')
+           ON CONFLICT (document_id, user_id) DO NOTHING`,
+          [docId, user.id]
+        );
 
         // Load document state
         const state = await getDocState(docId);

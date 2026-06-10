@@ -28,6 +28,9 @@ const Document = {
        FROM documents d
        JOIN users u ON u.id = d.owner_id
        WHERE d.owner_id = $1
+         OR d.id IN (
+           SELECT document_id FROM document_collaborators WHERE user_id = $1
+         )
        ORDER BY d.updated_at DESC`,
       [userId]
     );
