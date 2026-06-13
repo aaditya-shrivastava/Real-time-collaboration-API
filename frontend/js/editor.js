@@ -471,6 +471,25 @@ function goToDashboard() {
   window.location.href = '/';
 }
 
+function toggleSidebar() {
+  const sidebar = document.querySelector('.sidebar');
+  if (sidebar) sidebar.classList.toggle('open');
+}
+
+// Close sidebar when clicking outside on mobile
+document.addEventListener('click', (e) => {
+  const sidebar = document.querySelector('.sidebar');
+  const toggle = document.querySelector('.sidebar-toggle');
+  if (
+    sidebar &&
+    sidebar.classList.contains('open') &&
+    !sidebar.contains(e.target) &&
+    !toggle.contains(e.target)
+  ) {
+    sidebar.classList.remove('open');
+  }
+});
+
 function shareDoc() {
   const url = window.location.href;
   navigator.clipboard.writeText(url).then(() => {
