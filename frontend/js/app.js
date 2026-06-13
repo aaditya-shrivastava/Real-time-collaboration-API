@@ -149,11 +149,23 @@ async function deleteDoc(e, id) {
   e.stopPropagation();
   if (!confirm('Delete this document?')) return;
   try {
+    // Instantly remove the card from DOM — no refresh needed
+    const card = e.target.closest('.doc-card');
+    if (card) {
+      card.style.transition = 'opacity .2s, transform .2s';
+      card.style.opacity = '0';
+      card.style.transform = 'scale(0.95)';
+      setTimeout(() => card.remove(), 200);
+    }
+
     await apiFetch(`/documents/${id}`, { method: 'DELETE' });
     toast('Document deleted', 'success');
-    loadDocuments();
+
+    // Reload to reflect correct order and empty state
+    await loadDocuments();
   } catch (err) {
     toast(err.message, 'error');
+    await loadDocuments(); // restore if delete failed
   }
 }
 
