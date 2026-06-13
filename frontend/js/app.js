@@ -113,7 +113,6 @@ function renderDocuments(docs) {
 
   if (!docs.length) {
     empty.style.display = 'block';
-    grid.appendChild(empty);
     return;
   }
 
