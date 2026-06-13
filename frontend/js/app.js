@@ -85,6 +85,8 @@ function handleLogout() {
 }
 
 // ── Dashboard ──
+let cachedDocs = []; // in-memory source of truth
+
 function showDashboard() {
   const user = getUser();
   if (!user) return;
@@ -97,7 +99,8 @@ function showDashboard() {
 async function loadDocuments() {
   try {
     const { documents } = await apiFetch('/documents');
-    renderDocuments(documents);
+    cachedDocs = documents;
+    renderDocuments(cachedDocs);
   } catch (err) {
     toast(err.message, 'error');
   }
@@ -118,6 +121,7 @@ function renderDocuments(docs) {
   docs.forEach(doc => {
     const card = document.createElement('div');
     card.className = 'doc-card';
+    card.dataset.id = doc.id;
     card.innerHTML = `
       <h3>${escHtml(doc.title)}</h3>
       <div class="doc-meta">
@@ -149,23 +153,18 @@ async function deleteDoc(e, id) {
   e.stopPropagation();
   if (!confirm('Delete this document?')) return;
   try {
-    // Walk up from whatever was clicked to find the card
-    let el = e.target;
-    while (el && !el.classList.contains('doc-card')) {
-      el = el.parentElement;
-    }
-    if (el) {
-      el.style.transition = 'opacity .2s, transform .2s';
-      el.style.opacity = '0';
-      el.style.transform = 'scale(0.95)';
-      setTimeout(() => el.remove(), 200);
-    }
+    // 1. Remove from cache immediately
+    cachedDocs = cachedDocs.filter(d => d.id !== id);
 
+    // 2. Re-render from cache instantly — no flicker, no refresh
+    renderDocuments(cachedDocs);
+
+    // 3. Delete on server in background
     await apiFetch(`/documents/${id}`, { method: 'DELETE' });
     toast('Document deleted', 'success');
-    await loadDocuments();
   } catch (err) {
     toast(err.message, 'error');
+    // Restore by refetching if server delete failed
     await loadDocuments();
   }
 }
