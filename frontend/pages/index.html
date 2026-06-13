@@ -74,17 +74,17 @@
 
       <!-- Login -->
       <div id="login-form" class="auth-form active">
-        <div class="form-group">
-          <label>Email</label>
-          <input type="email" id="login-email" placeholder="you@example.com" />
-        </div>
-        <div class="form-group">
-          <label>Password</label>
-          <input type="password" id="login-pass" placeholder="••••••••" />
-        </div>
-        <button class="btn btn-primary" style="width:100%" onclick="handleLogin()">
-          Sign in
-        </button>
+        <form onsubmit="event.preventDefault(); handleLogin()">
+          <div class="form-group">
+            <label>Email</label>
+            <input type="email" id="login-email" placeholder="you@example.com" autocomplete="email" />
+          </div>
+          <div class="form-group">
+            <label>Password</label>
+            <input type="password" id="login-pass" placeholder="••••••••" autocomplete="current-password" />
+          </div>
+          <button type="submit" class="btn btn-primary" style="width:100%">Sign in</button>
+        </form>
         <div class="auth-footer">
           Don't have an account? <a href="#" onclick="switchTab('register')">Create one</a>
         </div>
@@ -92,21 +92,21 @@
 
       <!-- Register -->
       <div id="register-form" class="auth-form">
-        <div class="form-group">
-          <label>Username</label>
-          <input type="text" id="reg-username" placeholder="yourname" />
-        </div>
-        <div class="form-group">
-          <label>Email</label>
-          <input type="email" id="reg-email" placeholder="you@example.com" />
-        </div>
-        <div class="form-group">
-          <label>Password</label>
-          <input type="password" id="reg-pass" placeholder="min 6 characters" />
-        </div>
-        <button class="btn btn-primary" style="width:100%" onclick="handleRegister()">
-          Create account
-        </button>
+        <form onsubmit="event.preventDefault(); handleRegister()">
+          <div class="form-group">
+            <label>Username</label>
+            <input type="text" id="reg-username" placeholder="yourname" autocomplete="username" />
+          </div>
+          <div class="form-group">
+            <label>Email</label>
+            <input type="email" id="reg-email" placeholder="you@example.com" autocomplete="email" />
+          </div>
+          <div class="form-group">
+            <label>Password</label>
+            <input type="password" id="reg-pass" placeholder="min 6 characters" autocomplete="new-password" />
+          </div>
+          <button type="submit" class="btn btn-primary" style="width:100%">Create account</button>
+        </form>
         <div class="auth-footer">
           Already have an account? <a href="#" onclick="switchTab('login')">Sign in</a>
         </div>
