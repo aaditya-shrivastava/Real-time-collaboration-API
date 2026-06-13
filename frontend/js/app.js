@@ -44,10 +44,24 @@ function switchTab(tab) {
   document.getElementById('register-form').classList.toggle('active', tab === 'register');
 }
 
+// ── Validation helpers ──
+function isValidEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function isValidPassword(password) {
+  if (password.length < 8) return 'Password must be at least 8 characters';
+  if (!/\d/.test(password)) return 'Password must contain at least one number';
+  return null;
+}
+
 async function handleLogin() {
   const email = document.getElementById('login-email').value.trim();
   const password = document.getElementById('login-pass').value;
-  if (!email || !password) return toast('Fill in all fields', 'error');
+
+  if (!email || !password) return toast('All fields are required', 'error');
+  if (!isValidEmail(email)) return toast('Please enter a valid email address', 'error');
+
   try {
     const { user, token } = await apiFetch('/users/login', {
       method: 'POST',
@@ -64,7 +78,14 @@ async function handleRegister() {
   const username = document.getElementById('reg-username').value.trim();
   const email = document.getElementById('reg-email').value.trim();
   const password = document.getElementById('reg-pass').value;
-  if (!username || !email || !password) return toast('Fill in all fields', 'error');
+
+  if (!username || !email || !password) return toast('All fields are required', 'error');
+  if (username.length < 2) return toast('Username must be at least 2 characters', 'error');
+  if (!isValidEmail(email)) return toast('Please enter a valid email address', 'error');
+
+  const passError = isValidPassword(password);
+  if (passError) return toast(passError, 'error');
+
   try {
     const { user, token } = await apiFetch('/users/register', {
       method: 'POST',

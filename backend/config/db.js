@@ -10,7 +10,7 @@ const initSchema = async () => {
     await client.query(`
       CREATE TABLE IF NOT EXISTS users (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        username VARCHAR(50) UNIQUE NOT NULL,
+        username VARCHAR(50) NOT NULL,
         email VARCHAR(255) UNIQUE NOT NULL,
         password_hash VARCHAR(255) NOT NULL,
         created_at TIMESTAMPTZ DEFAULT NOW()
@@ -46,6 +46,19 @@ const initSchema = async () => {
       CREATE INDEX IF NOT EXISTS idx_versions_doc_id ON versions(document_id);
       CREATE INDEX IF NOT EXISTS idx_documents_owner ON documents(owner_id);
     `);
+
+    // Migration: drop unique constraint on username if exists
+    await client.query(`
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'users_username_key'
+        ) THEN
+          ALTER TABLE users DROP CONSTRAINT users_username_key;
+        END IF;
+      END $$;
+    `);
+
     console.log('✅ Database schema initialized');
   } catch (err) {
     console.error('❌ Schema init error:', err.message);

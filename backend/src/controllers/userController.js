@@ -4,13 +4,32 @@ const User = require('../models/user');
 const register = async (req, res, next) => {
   try {
     const { username, email, password } = req.body;
+
+    // Required fields
     if (!username || !email || !password) {
       return res.status(400).json({ error: 'All fields are required' });
     }
-    if (password.length < 6) {
-      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+
+    // Username — just required, no uniqueness needed
+    if (username.trim().length < 2) {
+      return res.status(400).json({ error: 'Username must be at least 2 characters' });
     }
-    const user = await User.create({ username, email, password });
+
+    // Email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ error: 'Please enter a valid email address' });
+    }
+
+    // Password — min 8 chars, at least one number
+    if (password.length < 8) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters' });
+    }
+    if (!/\d/.test(password)) {
+      return res.status(400).json({ error: 'Password must contain at least one number' });
+    }
+
+    const user = await User.create({ username: username.trim(), email: email.toLowerCase(), password });
     const token = jwt.sign(
       { id: user.id, username: user.username, email: user.email },
       process.env.JWT_SECRET,
@@ -19,7 +38,7 @@ const register = async (req, res, next) => {
     res.status(201).json({ user, token });
   } catch (err) {
     if (err.code === '23505') {
-      return res.status(409).json({ error: 'Email or username already exists' });
+      return res.status(409).json({ error: 'Email already registered' });
     }
     next(err);
   }
