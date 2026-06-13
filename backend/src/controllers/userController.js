@@ -1,5 +1,16 @@
 const jwt = require('jsonwebtoken');
+const dns = require('dns').promises;
 const User = require('../models/user');
+
+const isValidEmailDomain = async (email) => {
+  const domain = email.split('@')[1];
+  try {
+    const records = await dns.resolveMx(domain);
+    return records && records.length > 0;
+  } catch {
+    return false;
+  }
+};
 
 const register = async (req, res, next) => {
   try {
@@ -19,6 +30,12 @@ const register = async (req, res, next) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
       return res.status(400).json({ error: 'Please enter a valid email address' });
+    }
+
+    // Email domain existence — DNS MX record lookup
+    const domainExists = await isValidEmailDomain(email);
+    if (!domainExists) {
+      return res.status(400).json({ error: 'Email domain does not exist. Please use a real email address' });
     }
 
     // Password — min 8 chars, at least one number
