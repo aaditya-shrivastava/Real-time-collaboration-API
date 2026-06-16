@@ -204,10 +204,6 @@ Every keystroke would flood PostgreSQL. A 2-second debounce batches rapid edits 
 
 ---
 
-## 🌐 Deployment (Railway)
+## 🌐 Deployment.
 
-1. Push to GitHub
-2. Create new project on [Railway](https://railway.app)
-3. Add PostgreSQL and Redis plugins
-4. Deploy the `backend/` service, set environment variables
-5. Done — Railway supports WebSockets natively
+Deployment is done on [Render](https://render.com)
